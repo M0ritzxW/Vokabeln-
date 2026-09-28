@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vokabeln">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f766e">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Vokabeltrainer</title>
+<style>
+/* ---------- Farben (hell + dunkel automatisch) ---------- */
+:root{--bg:#f4f5f1;--card:#fff;--ink:#1c2626;--mut:#667675;--ac:#0f766e;--on:#fff;--ok:#15803d;--bad:#b91c1c;--ln:#d9ddd6}
+@media(prefers-color-scheme:dark){:root{--bg:#111819;--card:#1b2526;--ink:#e8eeee;--mut:#9aa8a8;--ac:#2dd4bf;--on:#062a26;--ok:#4ade80;--bad:#f87171;--ln:#2c3939}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:18px/1.4 system-ui,-apple-system,sans-serif}
+/* Safe-Area: Abstände für Notch/Home-Balken */
+body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+main{max-width:1100px;margin:0 auto;padding:12px 16px 40px}
+.tabs{display:flex;gap:8px;padding:8px 16px 0;max-width:1100px;margin:0 auto}
+.tabs button{flex:1;min-height:52px;font-size:19px;font-weight:600;background:var(--card);color:var(--mut);border:1px solid var(--ln);border-radius:14px}
+.tabs button.on{background:var(--ac);color:var(--on);border-color:var(--ac)}
+button{font:inherit;min-height:48px;padding:0 18px;border-radius:12px;border:0;background:var(--ac);color:var(--on);font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--ac);border:1px solid var(--ln)}
+button.danger{background:var(--bad);color:#fff}
+button:disabled{opacity:.4}
+input,select{font:inherit;width:100%;min-height:52px;padding:0 14px;border-radius:12px;border:1px solid var(--ln);background:var(--card);color:var(--ink)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin:10px 0}
+.bar .grp{display:flex;flex-wrap:wrap;gap:8px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.cols{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--ln);border-radius:16px;padding:6px;min-height:80px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:52px;padding:6px 14px;border-radius:12px;cursor:pointer}
+.row.sel{background:color-mix(in srgb,var(--ac) 18%,transparent);font-weight:600}
+.row.over{outline:2px dashed var(--ac)}
+.badge{background:var(--bad);color:#fff;border-radius:99px;padding:2px 10px;font-size:15px}
+.mut{color:var(--mut)}
+.empty{padding:18px;color:var(--mut)}
+.vk{display:block;width:100%;text-align:left;background:none;color:var(--ink);border-bottom:1px solid var(--ln);border-radius:0;font-weight:400;min-height:56px}
+/* ---------- Lernkarte mit Flip-Animation ---------- */
+.scene{perspective:1200px;margin:16px 0}
+.card{position:relative;height:clamp(200px,34vh,320px);transition:transform .6s;transform-style:preserve-3d}
+.card.flip{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px;text-align:center;font-size:32px;font-weight:600;background:var(--card);border:2px solid var(--ln);border-radius:22px;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.face.back{transform:rotateY(180deg)}
+.face.back.ok{border-color:var(--ok)}.face.back.bad{border-color:var(--bad)}
+.face small{font-size:16px;font-weight:400;color:var(--mut)}
+.ans{display:flex;gap:10px}.ans button{min-width:130px}
+dialog{width:min(520px,92vw);border:0;border-radius:18px;background:var(--card);color:var(--ink);padding:20px}
+dialog::backdrop{background:#0008}
+dialog h3{margin:0 0 12px}dialog label{display:block;margin:10px 0 4px;color:var(--mut);font-size:15px}
+.btns{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<nav class="tabs">
+  <button id="tab-learn" class="on">Vokabel lernen</button>
+  <button id="tab-edit">Vokabel bearbeiten</button>
+</nav>
+<main>
+  <!-- Reiter 1: Lernen -->
+  <section id="learn"></section>
+  <!-- Reiter 2: Bearbeiten -->
+  <section id="edit" hidden>
+    <div class="bar">
+      <h2 style="margin:0">Ordner &amp; Vokabeln</h2>
+      <button id="csv-btn">CSV importieren</button>
+    </div>
+    <div class="bar">
+      <div class="grp">
+        <button class="ghost" id="f-new">+ Ordner</button>
+        <button class="ghost" id="f-ren">Umbenennen</button>
+        <button class="ghost" id="f-mov">Verschieben</button>
+        <button class="ghost" id="f-del">Löschen</button>
+      </div>
+    </div>
+    <div class="cols">
+      <div class="panel" id="tree-e"></div>
+      <div>
+        <div class="bar" style="margin-top:0"><b id="cards-title"></b><button id="c-new">+ Vokabel</button></div>
+        <div class="panel" id="cards"></div>
+      </div>
+    </div>
+    <div class="bar" style="margin-top:24px">
+      <div class="grp">
+        <button class="ghost" id="exp">Backup exportieren</button>
+        <button class="ghost" id="imp">Backup importieren</button>
+      </div>
+    </div>
+  </section>
+</main>
+<dialog id="dlg"></dialog>
+<input type="file" id="csv-file" accept=".csv,.txt,text/csv,text/plain" hidden>
+<input type="file" id="json-file" accept=".json,application/json" hidden>
+
+<script>
+'use strict';
+/* ================= Daten ================= */
+const KEY = 'vokabeltrainer-v1';
+const DAYS = [0, 1, 3, 7, 14, 30];            // Wartezeit je Stufe 1..6 in Tagen
+// db.folders: {id, name, parent(null = oberste Ebene)}  db.cards: {id, folder, front, back, level, due}
+let db = JSON.parse(localStorage.getItem(KEY) || 'null') || { folders: [], cards: [] };
+const save = () => localStorage.setItem(KEY, JSON.stringify(db));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- Ordner-Hilfsfunktionen ---------- */
+const kids = p => db.folders.filter(f => f.parent === p);
+const subtree = id => [id, ...kids(id).flatMap(k => subtree(k.id))];       // Ordner + alle Unterordner
+const folderById = id => db.folders.find(f => f.id === id);
+const pathOf = id => { const f = folderById(id); return f.parent ? pathOf(f.parent) + ' › ' + f.name : f.name; };
+const dueCount = id => { const s = subtree(id), n = Date.now(); return db.cards.filter(c => s.includes(c.folder) && c.due <= n).length; };
+const folderOpts = (selected, exclude = []) => db.folders.filter(f => !exclude.includes(f.id))
+  .map(f => `<option value="${f.id}" ${f.id === selected ? 'selected' : ''}>${esc(pathOf(f.id))}</option>`).join('');
+
+/* Ordnerbaum als HTML (rekursiv); edit=true macht Zeilen ziehbar */
+function treeHTML(selId, edit, parent = null, depth = 0) {
+  return kids(parent).map(f => {
+    const n = dueCount(f.id);
+    return `<div class="row ${selId === f.id ? 'sel' : ''}" data-id="${f.id}" draggable="${edit}" style="padding-left:${14 + depth * 24}px">
+      <span>📁 ${esc(f.name)}</span>${n ? `<b class="badge" title="überfällig">${n}</b>` : ''}</div>` + treeHTML(selId, edit, f.id, depth + 1);
+  }).join('');
+}
+
+/* ---------- Dialog (Eingaben) ---------- */
+function ask(title, body, onOk, onDelete) {
+  const d = $('#dlg');
+  d.innerHTML = `<h3>${title}</h3>${body}<div class="btns">${onDelete ? '<button type="button" class="danger" id="dx">Löschen</button>' : ''}
+    <button type="button" class="ghost" id="dc">Abbrechen</button><button type="button" id="dok">Speichern</button></div>`;
+  $('#dc').onclick = () => d.close();
+  $('#dok').onclick = () => { if (onOk() !== false) d.close(); };
+  if (onDelete) $('#dx').onclick = () => { onDelete(); d.close(); };
+  d.onkeydown = e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); $('#dok').click(); } };
+  d.showModal();
+}
+
+/* ================= Reiter ================= */
+let tab = 'learn', sel = null, S = null;       // sel = gewählter Ordner (Bearbeiten), S = Lern-Sitzung
+function show(t) {
+  tab = t;
+  $('#learn').hidden = t !== 'learn'; $('#edit').hidden = t !== 'edit';
+  $('#tab-learn').classList.toggle('on', t === 'learn'); $('#tab-edit').classList.toggle('on', t === 'edit');
+  t === 'learn' ? renderLearn() : renderEdit();
+}
+$('#tab-learn').onclick = () => show('learn');
+$('#tab-edit').onclick = () => { S = null; show('edit'); };
+
+/* ================= Bearbeiten ================= */
+function renderEdit() {
+  if (sel && !folderById(sel)) sel = null;
+  $('#tree-e').innerHTML = `<div class="row root ${sel === null ? 'sel' : ''}" data-id="">🏠 Hauptordner</div>` + treeHTML(sel, true);
+  ['f-ren', 'f-mov', 'f-del', 'c-new'].forEach(i => $('#' + i).disabled = !sel);
+  $('#cards-title').textContent = sel ? pathOf(sel) : '';
+  const list = sel ? db.cards.filter(c => c.folder === sel) : [];
+  $('#cards').innerHTML = !sel ? '<div class="empty">Wähle links einen Ordner.</div>'
+    : list.length ? list.map(c => `<button class="vk" data-c="${c.id}">${esc(c.front)} <span class="mut">→ ${esc(c.back)}</span></button>`).join('')
+    : '<div class="empty">Noch keine Vokabeln in diesem Ordner.</div>';
+}
+
+/* Klick auf Ordner = auswählen */
+$('#tree-e').onclick = e => { const r = e.target.closest('.row'); if (r) { sel = r.dataset.id || null; renderEdit(); } };
+
+/* Ordner verschieben (Auswahl und Drag & Drop nutzen dieselbe Funktion) */
+function moveFolder(id, target) {
+  if (target !== null && subtree(id).includes(target)) { alert('Ein Ordner kann nicht in sich selbst oder einen eigenen Unterordner verschoben werden.'); return; }
+  folderById(id).parent = target; save(); renderEdit();
+}
+const tree = $('#tree-e'); let dragId = null;
+tree.ondragstart = e => { const r = e.target.closest('.row'); if (r && r.dataset.id) { dragId = r.dataset.id; e.dataTransfer.setData('text/plain', dragId); } };
+tree.ondragover = e => { if (dragId && e.target.closest('.row')) { e.preventDefault(); } };
+tree.ondragenter = e => { const r = e.target.closest('.row'); if (r && dragId) r.classList.add('over'); };
+tree.ondragleave = e => { const r = e.target.closest('.row'); if (r) r.classList.remove('over'); };
+tree.ondrop = e => { e.preventDefault(); const r = e.target.closest('.row'); if (r && dragId) moveFolder(dragId, r.dataset.id || null); dragId = null; };
+tree.ondragend = () => { dragId = null; renderEdit(); };
+
+$('#f-new').onclick = () => ask(sel ? 'Unterordner in „' + esc(folderById(sel).name) + '“' : 'Neuer Ordner',
+  '<input id="n" placeholder="Name" autocomplete="off">', () => {
+    const n = $('#n').value.trim(); if (!n) return false;
+    const f = { id: uid(), name: n, parent: sel }; db.folders.push(f); save(); renderEdit();
+  });
+$('#f-ren').onclick = () => ask('Ordner umbenennen', `<input id="n" value="${esc(folderById(sel).name)}">`, () => {
+  const n = $('#n').value.trim(); if (!n) return false; folderById(sel).name = n; save(); renderEdit();
+});
+$('#f-mov').onclick = () => {
+  const f = folderById(sel);
+  ask('Ordner verschieben nach', `<select id="t"><option value="">🏠 Hauptordner</option>${folderOpts(f.parent, subtree(sel))}</select>`,
+    () => moveFolder(sel, $('#t').value || null));
+};
+$('#f-del').onclick = () => {
+  if (!confirm('Ordner samt Unterordnern und allen Vokabeln darin löschen?')) return;
+  const s = subtree(sel);
+  db.folders = db.folders.filter(f => !s.includes(f.id)); db.cards = db.cards.filter(c => !s.includes(c.folder));
+  sel = null; save(); renderEdit();
+};
+
+/* Vokabeln: hinzufügen / bearbeiten / löschen / in anderen Ordner verschieben */
+function cardDialog(c) {
+  const isNew = !c;
+  ask(isNew ? 'Neue Vokabel' : 'Vokabel bearbeiten',
+    `<label>Vorderseite</label><input id="fr" value="${isNew ? '' : esc(c.front)}" autocomplete="off">
+     <label>Lösung</label><input id="bk" value="${isNew ? '' : esc(c.back)}" autocomplete="off">
+     <label>Ordner</label><select id="fo">${folderOpts(isNew ? sel : c.folder)}</select>`,
+    () => {
+      const fr = $('#fr').value.trim(), bk = $('#bk').value.trim(); if (!fr || !bk) return false;
+      if (isNew) db.cards.push({ id: uid(), folder: $('#fo').value, front: fr, back: bk, level: 1, due: Date.now() });
+      else Object.assign(c, { front: fr, back: bk, folder: $('#fo').value });
+      save(); renderEdit();
+    }, isNew ? null : () => { db.cards = db.cards.filter(x => x !== c); save(); renderEdit(); });
+}
+$('#c-new').onclick = () => cardDialog(null);
+$('#cards').onclick = e => { const b = e.target.closest('[data-c]'); if (b) cardDialog(db.cards.find(c => c.id === b.dataset.c)); };
+
+/* ---------- CSV-Import (Trennzeichen , oder ; wird erkannt) ---------- */
+function parseCSV(t) {
+  t = t.replace(/^\uFEFF/, '');
+  const first = t.split(/\r?\n/)[0] || '';
+  const sep = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ';' : ',';
+  const rows = []; let r = [], f = '', q = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (q) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === sep) { r.push(f); f = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; r.push(f); rows.push(r); r = []; f = ''; }
+    else f += c;
+  }
+  r.push(f); rows.push(r);
+  return rows.filter(x => x.length >= 2 && x[0].trim() && x[1].trim());
+}
+$('#csv-btn').onclick = () => sel ? $('#csv-file').click() : alert('Wähle zuerst links den Ordner, in den importiert werden soll.');
+$('#csv-file').onchange = async e => {
+  const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+  const rows = parseCSV(await file.text());      // file.text() liest als UTF-8
+  rows.forEach(x => db.cards.push({ id: uid(), folder: sel, front: x[0].trim(), back: x[1].trim(), level: 1, due: Date.now() }));
+  save(); renderEdit(); alert(rows.length + ' Vokabeln importiert.');
+};
+
+/* ---------- Backup als JSON ---------- */
+$('#exp').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(db, null, 1)], { type: 'application/json' }));
+  a.download = 'vokabeln-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+$('#imp').onclick = () => $('#json-file').click();
+$('#json-file').onchange = async e => {
+  const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    if (!Array.isArray(d.folders) || !Array.isArray(d.cards)) throw 0;
+    if (!confirm('Alle aktuellen Daten durch das Backup ersetzen?')) return;
+    db = d; sel = null; save(); renderEdit();
+  } catch { alert('Das ist keine gültige Backup-Datei.'); }
+};
+
+/* ================= Lernen ================= */
+const cardById = id => db.cards.find(c => c.id === id);
+function startSession(id) {
+  const s = subtree(id), n = Date.now();
+  const q = db.cards.filter(c => s.includes(c.folder) && c.due <= n).map(c => c.id);
+  if (!q.length) return alert('In diesem Ordner ist gerade nichts fällig.');
+  q.sort(() => Math.random() - .5);
+  S = { q, flipped: false, ok: 0, total: 0 }; renderLearn();
+}
+function renderLearn() {
+  const el = $('#learn');
+  if (!S) {   // Ordnerauswahl
+    el.innerHTML = '<h2>Ordner zum Lernen wählen</h2><div class="panel">' +
+      (db.folders.length ? treeHTML(null, false) : '<div class="empty">Lege zuerst im Reiter „Vokabel bearbeiten“ Ordner und Vokabeln an.</div>') + '</div>' +
+      (db.folders.length ? '<p class="mut">Die Zahl zeigt überfällige Karten (inklusive Unterordner).</p>' : '');
+    el.querySelectorAll('.row').forEach(r => r.onclick = () => startSession(r.dataset.id));
+    return;
+  }
+  if (!S.q.length) {   // Sitzung beendet
+    el.innerHTML = `<div class="scene"><div class="face" style="position:static;height:240px">Fertig 🎉<small>${S.ok} von ${S.total} Antworten richtig</small></div></div><button id="stop">Zurück zur Auswahl</button>`;
+    $('#stop').onclick = () => { S = null; renderLearn(); }; return;
+  }
+  const c = cardById(S.q[0]); S.flipped = false;
+  el.innerHTML = `<div class="bar"><button class="ghost" id="stop">‹ Ordner</button><span class="mut">Noch ${S.q.length} · Stufe ${c.level}</span></div>
+    <div class="scene"><div class="card" id="card"><div class="face">${esc(c.front)}</div>
+    <div class="face back" id="back"><small>Lösung</small>${esc(c.back)}<small id="mine"></small></div></div></div>
+    <div class="ans"><input id="ans" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Antwort eintippen"><button id="go">Prüfen</button></div>`;
+  $('#stop').onclick = () => { S = null; renderLearn(); };
+  $('#go').onclick = act; $('#ans').focus();
+}
+/* Erster Klick/Enter = prüfen und umdrehen, zweiter = nächste Karte */
+function act() {
+  if (!S || !S.q.length) return;
+  if (S.flipped) { renderLearn(); return; }
+  const c = cardById(S.q[0]);
+  const ok = $('#ans').value.trim().toLowerCase() === c.back.trim().toLowerCase();   // Groß-/Kleinschreibung + Randleerzeichen egal
+  S.total++; S.q.shift();
+  if (ok) { S.ok++; c.level = Math.min(6, c.level + 1); }         // richtig: genau eine Stufe hoch
+  else { c.level = 1; S.q.push(c.id); }                             // falsch: zurück auf Stufe 1, kommt später nochmal
+  c.due = Date.now() + DAYS[c.level - 1] * 864e5;                   // Fälligkeit passend zur neuen Stufe
+  save();
+  S.flipped = true;
+  $('#back').classList.add(ok ? 'ok' : 'bad');
+  if (!ok) $('#mine').textContent = 'Deine Eingabe: ' + ($('#ans').value.trim() || '–');
+  $('#card').classList.add('flip');
+  $('#ans').disabled = true; $('#go').textContent = 'Weiter'; $('#go').focus();
+}
+/* Hardware-Tastatur: Enter schickt ab bzw. geht weiter */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && tab === 'learn' && S && !$('#dlg').open) { e.preventDefault(); act(); }
+});
+
+/* ================= Start ================= */
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist();   // Daten vor automatischem Löschen schützen
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');
+show('learn');
+</script>
+</body>
+</html>
